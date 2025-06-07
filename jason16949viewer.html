@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>审核报告JSON查看器</title>
+    <style>
+        body {
+            font-family: 'Microsoft YaHei', Arial, sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+            color: #333;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 5px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        h1, h2, h3 {
+            color: #2c3e50;
+        }
+        h1 {
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 10px;
+        }
+        .upload-section {
+            margin-bottom: 30px;
+            padding: 20px;
+            background-color: #eaf2f8;
+            border-radius: 5px;
+        }
+        .report-section {
+            margin-top: 30px;
+        }
+        .section {
+            margin-bottom: 20px;
+            padding: 15px;
+            background-color: #f9f9f9;
+            border-left: 4px solid #3498db;
+        }
+        .nc-item {
+            background-color: #fdedec;
+            border-left: 4px solid #e74c3c;
+            margin-bottom: 15px;
+            padding: 10px;
+        }
+        .process-item {
+            background-color: #e8f8f5;
+            border-left: 4px solid #1abc9c;
+            margin-bottom: 15px;
+            padding: 10px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+        }
+        th, td {
+            padding: 10px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        th {
+            background-color: #3498db;
+            color: white;
+        }
+        tr:nth-child(even) {
+            background-color: #f2f2f2;
+        }
+        .json-viewer {
+            background-color: #f8f9fa;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 15px;
+            margin-top: 20px;
+            max-height: 500px;
+            overflow-y: auto;
+            font-family: monospace;
+            white-space: pre;
+        }
+        button {
+            background-color: #3498db;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        button:hover {
+            background-color: #2980b9;
+        }
+        .hidden {
+            display: none;
+        }
+        .tab {
+            overflow: hidden;
+            border: 1px solid #ccc;
+            background-color: #f1f1f1;
+            margin-bottom: 20px;
+        }
+        .tab button {
+            background-color: inherit;
+            float: left;
+            border: none;
+            outline: none;
+            cursor: pointer;
+            padding: 14px 16px;
+            transition: 0.3s;
+            color: #333;
+        }
+        .tab button:hover {
+            background-color: #ddd;
+        }
+        .tab button.active {
+            background-color: #3498db;
+            color: white;
+        }
+        .tabcontent {
+            display: none;
+            padding: 6px 12px;
+            border: 1px solid #ccc;
+            border-top: none;
+        }
+        .tabcontent.active {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>审核报告JSON查看器</h1>
+        
+        <div class="upload-section">
+            <h2>上传审核报告JSON文件</h2>
+            <input type="file" id="jsonFile" accept=".json">
+            <button onclick="loadJSON()">加载JSON文件</button>
+            <p>或直接粘贴JSON内容：</p>
+            <textarea id="jsonInput" rows="10" style="width: 100%;"></textarea>
+            <button onclick="parseJSON()">解析JSON</button>
+        </div>
+        
+        <div id="reportViewer" class="hidden">
+            <div class="tab">
+                <button class="tablinks active" onclick="openTab(event, 'summary')">摘要</button>
+                <button class="tablinks" onclick="openTab(event, 'processes')">过程评估</button>
+                <button class="tablinks" onclick="openTab(event, 'nonconformities')">不符合项</button>
+                <button class="tablinks" onclick="openTab(event, 'raw')">原始JSON</button>
+            </div>
+            
+            <div id="summary" class="tabcontent active">
+                <h2>审核报告摘要</h2>
+                <div id="reportSummary"></div>
+                
+                <h3>组织信息</h3>
+                <div id="orgInfo"></div>
+                
+                <h3>审核结果</h3>
+                <div id="auditResults"></div>
+            </div>
+            
+            <div id="processes" class="tabcontent">
+                <h2>过程评估</h2>
+                <div id="processList"></div>
+            </div>
+            
+            <div id="nonconformities" class="tabcontent">
+                <h2>不符合项</h2>
+                <div id="ncList"></div>
+            </div>
+            
+            <div id="raw" class="tabcontent">
+                <h2>原始JSON数据</h2>
+                <div class="json-viewer" id="jsonViewer"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function loadJSON() {
+            const fileInput = document.getElementById('jsonFile');
+            const file = fileInput.files[0];
+            
+            if (!file) {
+                alert('请先选择一个JSON文件');
+                return;
+            }
+            
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                document.getElementById('jsonInput').value = e.target.result;
+                parseJSON();
+            };
+            reader.readAsText(file);
+        }
+        
+        function parseJSON() {
+            const jsonInput = document.getElementById('jsonInput').value;
+            
+            if (!jsonInput) {
+                alert('请输入JSON内容');
+                return;
+            }
+            
+            try {
+                const reportData = JSON.parse(jsonInput);
+                displayReport(reportData);
+            } catch (e) {
+                alert('解析JSON时出错: ' + e.message);
+                console.error(e);
+            }
+        }
+        
+        function displayReport(data) {
+            document.getElementById('reportViewer').classList.remove('hidden');
+            
+            // 显示原始JSON
+            document.getElementById('jsonViewer').textContent = JSON.stringify(data, null, 2);
+            
+            // 显示摘要信息
+            displaySummary(data);
+            
+            // 显示组织信息
+            displayOrgInfo(data.OrganizationInformation);
+            
+            // 显示审核结果
+            displayAuditResults(data.Results);
+            
+            // 显示过程评估
+            displayProcesses(data.Processes);
+            
+            // 显示不符合项
+            displayNonconformities(data.NcManagement);
+        }
+        
+        function displaySummary(data) {
+            const summaryDiv = document.getElementById('reportSummary');
+            let html = `
+                <div class="section">
+                    <h3>基本信息</h3>
+                    <p><strong>报告名称:</strong> ${data.AuditData.ReportName}</p>
+                    <p><strong>审核日期:</strong> ${new Date(data.AuditData.AuditDate.Start).toLocaleDateString()} 至 ${new Date(data.AuditData.AuditDate.End).toLocaleDateString()}</p>
+                    <p><strong>审核类型:</strong> ${getAuditType(data.AuditData.AuditType)}</p>
+                    <p><strong>认证编号:</strong> ${data.AuditData.CbCertificateNo}</p>
+                    <p><strong>IATF编号:</strong> ${data.AuditData.IATFCertificateNo}</p>
+                </div>
+            `;
+            summaryDiv.innerHTML = html;
+        }
+        
+        function displayOrgInfo(orgInfo) {
+            const orgDiv = document.getElementById('orgInfo');
+            let html = `
+                <div class="section">
+                    <h3>${orgInfo.OrganizationName}</h3>
+                    <p><strong>地址:</strong> ${orgInfo.Address.Street1}, ${orgInfo.Address.City}, ${orgInfo.Address.Country}</p>
+                    <p><strong>代表:</strong> ${orgInfo.Representative}</p>
+                    <p><strong>联系方式:</strong> ${orgInfo.Telephone} | ${orgInfo.Email}</p>
+                    <p><strong>产品:</strong> ${orgInfo.Products}</p>
+                    <p><strong>认证范围:</strong> ${orgInfo.CertificateScope}</p>
+                    <p><strong>员工人数:</strong> ${orgInfo.TotalNumberEmployees} (全职), ${orgInfo.TotalNumberPartTimeEmployees} (兼职)</p>
+                    <p><strong>外包过程:</strong> ${orgInfo.CommentsOutsourcedProcesses}</p>
+                </div>
+            `;
+            orgDiv.innerHTML = html;
+        }
+        
+        function displayAuditResults(results) {
+            const resultsDiv = document.getElementById('auditResults');
+            let html = `
+                <div class="section">
+                    <h3>审核结论</h3>
+                    <p><strong>结论:</strong> ${getConclusionText(results.AuditTeamConclusion)}</p>
+                    <p><strong>不符合项:</strong> 主要 ${results.NumberOfNonconformitiesAudit.Major} 个, 次要 ${results.NumberOfNonconformitiesAudit.Minor} 个</p>
+                    <p><strong>下次审核:</strong> ${new Date(results.DateNextScheduledAudit).toLocaleDateString()} (${getAuditType(results.NextScheduledAuditType)})</p>
+                    <p><strong>摘要:</strong> ${results.AuditSummary}</p>
+                </div>
+            `;
+            resultsDiv.innerHTML = html;
+        }
+        
+        function displayProcesses(processes) {
+            const processDiv = document.getElementById('processList');
+            let html = '';
+            
+            processes.forEach(process => {
+                if (!process.ProcessName) return;
+                
+                // 计算符合和不符合的条款数量
+                let compliantCount = 0;
+                let nonCompliantCount = 0;
+                let naCount = 0;
+                
+                for (const key in process) {
+                    if (key.match(/^\d+\.\d+$/)) {
+                        const clause = process[key];
+                        if (clause.TextValue === "NA") {
+                            naCount++;
+                        } else {
+                            for (const subKey in clause) {
+                                if (subKey.match(/^\d+$/) && clause[subKey].Value === true) {
+                                    if (clause[subKey].Ncs > 0) {
+                                        nonCompliantCount++;
+                                    } else {
+                                        compliantCount++;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                // 获取KPI信息
+                let kpiHtml = '';
+                if (process.ProcessPerformance && process.ProcessPerformance.length > 0) {
+                    kpiHtml = '<h4>KPI指标:</h4><ul>';
+                    process.ProcessPerformance.forEach(kpi => {
+                        const achieved = kpi.Achieved === "1" ? '✅' : '❌';
+                        kpiHtml += `<li>${kpi.KPI}: ${kpi.Results} (目标: ${kpi.CurrentTarget}) ${achieved}</li>`;
+                    });
+                    kpiHtml += '</ul>';
+                }
+                
+                html += `
+                    <div class="process-item">
+                        <h3>${process.ProcessName}</h3>
+                        <p><strong>状态:</strong> ${process.ManufacturingProcess === "1" ? "制造过程" : "支持过程"}</p>
+                        <p><strong>符合条款:</strong> ${compliantCount} | <strong>不符合条款:</strong> ${nonCompliantCount} | <strong>不适用:</strong> ${naCount}</p>
+                        ${kpiHtml}
+                        <p><strong>审核信息:</strong> ${process.AuditInformation || '无'}</p>
+                    </div>
+                `;
+            });
+            
+            processDiv.innerHTML = html;
+        }
+        
+        function displayNonconformities(ncData) {
+            const ncDiv = document.getElementById('ncList');
+            let html = '';
+            
+            if (ncData && ncData.NcActions && ncData.NcActions.length > 0) {
+                ncData.NcActions.forEach(nc => {
+                    html += `
+                        <div class="nc-item">
+                            <h3>${nc.NcIdentificationNo} - ${nc.StatementOfNonconformity}</h3>
+                            <p><strong>过程:</strong> ${getProcessName(nc.NcObserved, ncData.Processes)}</p>
+                            <p><strong>条款:</strong> ${nc.StandardClause[0].No} (${nc.Requirement})</p>
+                            <p><strong>分类:</strong> ${nc.Classification === "1" ? "次要" : "主要"}不符合</p>
+                            <p><strong>截止日期:</strong> ${new Date(nc.DueDate60).toLocaleDateString()}</p>
+                            <p><strong>客观证据:</strong> ${nc.ObjectiveEvidence}</p>
+                            <p><strong>审核员:</strong> ${nc.Signature.AuditorName} (${new Date(nc.Signature.Date).toLocaleDateString()})</p>
+                        </div>
+                    `;
+                });
+            } else {
+                html = '<p>无不符合项</p>';
+            }
+            
+            ncDiv.innerHTML = html;
+        }
+        
+        function getAuditType(typeCode) {
+            const types = {
+                "1": "监督审核",
+                "2": "再认证审核",
+                "3": "转移审核",
+                "4": "特殊审核"
+            };
+            return types[typeCode] || `未知类型(${typeCode})`;
+        }
+        
+        function getConclusionText(conclusionCode) {
+            const conclusions = {
+                "1": "通过",
+                "2": "暂缓（需整改）",
+                "3": "不通过"
+            };
+            return conclusions[conclusionCode] || `未知结论(${conclusionCode})`;
+        }
+        
+        function getProcessName(processId, processes) {
+            if (!processes || !processId) return "未知过程";
+            const process = processes.find(p => p.Id === processId);
+            return process ? process.ProcessName : "未知过程";
+        }
+        
+        function openTab(evt, tabName) {
+            const tabcontents = document.getElementsByClassName("tabcontent");
+            for (let i = 0; i < tabcontents.length; i++) {
+                tabcontents[i].classList.remove("active");
+            }
+            
+            const tablinks = document.getElementsByClassName("tablinks");
+            for (let i = 0; i < tablinks.length; i++) {
+                tablinks[i].classList.remove("active");
+            }
+            
+            document.getElementById(tabName).classList.add("active");
+            evt.currentTarget.classList.add("active");
+        }
+    </script>
+</body>
+</html>
