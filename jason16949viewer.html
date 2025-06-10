@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="author" content="郭晓东 - 中国质量认证中心">
     <title>审核报告JSON查看器</title>
     <style>
         body {
@@ -140,9 +141,9 @@
             <h2>上传审核报告JSON文件</h2>
             <input type="file" id="jsonFile" accept=".json">
             <button onclick="loadJSON()">加载JSON文件</button>
-            <p>或直接粘贴JSON内容：</p>
+            <p id="txtPasteJSON">或直接粘贴JSON内容：</p>
             <textarea id="jsonInput" rows="10" style="width: 100%;"></textarea>
-            <button onclick="parseJSON()">解析JSON</button>
+            <button id="btnParseJSON" onclick="parseJSON()">解析JSON</button>
         </div>
         
         <div id="reportViewer" class="hidden">
@@ -182,59 +183,65 @@
     </div>
 
     <script>
+        // 加载JSON文件的主函数
         function loadJSON() {
             const fileInput = document.getElementById('jsonFile');
             const file = fileInput.files[0];
             
+            // 检查文件选择状态
             if (!file) {
                 alert('请先选择一个JSON文件');
                 return;
             }
             
+            // 创建文件阅读器并设置加载完成回调
             const reader = new FileReader();
             reader.onload = function(e) {
+                // 将文件内容填充到文本输入框并触发解析
                 document.getElementById('jsonInput').value = e.target.result;
+                document.getElementById('jsonInput').classList.add('hidden');
+                document.getElementById('txtPasteJSON').classList.add('hidden');
+                document.getElementById('btnParseJSON').classList.add('hidden');
                 parseJSON();
             };
             reader.readAsText(file);
         }
         
+        // 解析JSON数据的核心函数
         function parseJSON() {
             const jsonInput = document.getElementById('jsonInput').value;
             
+            // 输入内容校验
             if (!jsonInput) {
                 alert('请输入JSON内容');
                 return;
             }
             
             try {
+                // 解析JSON并显示报告
                 const reportData = JSON.parse(jsonInput);
                 displayReport(reportData);
             } catch (e) {
+                // 错误处理：显示解析错误信息
                 alert('解析JSON时出错: ' + e.message);
                 console.error(e);
             }
         }
         
+        /* 
+         * 主报告展示函数
+         * @param {Object} data - 解析后的JSON数据对象 
+         */
         function displayReport(data) {
+            // 显示报告查看器容器
             document.getElementById('reportViewer').classList.remove('hidden');
             
-            // 显示原始JSON
+            // 调用各模块显示函数
             document.getElementById('jsonViewer').textContent = JSON.stringify(data, null, 2);
-            
-            // 显示摘要信息
             displaySummary(data);
-            
-            // 显示组织信息
             displayOrgInfo(data.OrganizationInformation);
-            
-            // 显示审核结果
             displayAuditResults(data.Results);
-            
-            // 显示过程评估
             displayProcesses(data.Processes);
-            
-            // 显示不符合项
             displayNonconformities(data.NcManagement);
         }
         
@@ -284,31 +291,34 @@
             resultsDiv.innerHTML = html;
         }
         
+        /* 
+         * 显示过程评估数据
+         * @param {Array} processes - 过程数据数组 
+         */
         function displayProcesses(processes) {
             const processDiv = document.getElementById('processList');
             let html = '';
             
+            // 遍历每个过程项
             processes.forEach(process => {
                 if (!process.ProcessName) return;
                 
-                // 计算符合和不符合的条款数量
+                // 初始化计数器
                 let compliantCount = 0;
                 let nonCompliantCount = 0;
                 let naCount = 0;
                 
+                // 遍历过程属性进行条款统计
                 for (const key in process) {
-                    if (key.match(/^\d+\.\d+$/)) {
+                    if (key.match(/^\d+\.\d+$/)) {  // 匹配条款编号格式（如5.1）
                         const clause = process[key];
                         if (clause.TextValue === "NA") {
                             naCount++;
                         } else {
+                            // 遍历子条款进行符合性判断
                             for (const subKey in clause) {
                                 if (subKey.match(/^\d+$/) && clause[subKey].Value === true) {
-                                    if (clause[subKey].Ncs > 0) {
-                                        nonCompliantCount++;
-                                    } else {
-                                        compliantCount++;
-                                    }
+                                    clause[subKey].Ncs > 0 ? nonCompliantCount++ : compliantCount++;
                                 }
                             }
                         }
@@ -326,6 +336,7 @@
                     kpiHtml += '</ul>';
                 }
                 
+                // 构建过程项HTML
                 html += `
                     <div class="process-item">
                         <h3>${process.ProcessName}</h3>
